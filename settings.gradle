@@ -14,5 +14,3 @@ dependencyResolutionManagement {
 }
 rootProject.name = "Address Analyzer"
 include ':app'
-
-include ':openCV'

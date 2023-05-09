@@ -26,9 +26,6 @@ import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.opencv.android.Utils
-import org.opencv.core.*
-import org.opencv.imgproc.Imgproc
 import org.tensorflow.lite.DataType
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.support.common.ops.NormalizeOp
@@ -43,7 +40,6 @@ import java.io.IOException
 import java.nio.channels.FileChannel
 import java.text.SimpleDateFormat
 import java.util.*
-import kotlin.collections.ArrayList
 
 /**
  * A simple [Fragment] subclass as the default destination in the navigation.
@@ -52,11 +48,7 @@ class UploaderFragment : Fragment() {
 
     companion object {
         const val MODEL_FILE_NAME = "model.tflite"
-        const val SCALE = 0.5
         const val IMAGE_SIZE = 32
-        const val MIN_ASPECT_RATIO = 0.5
-        const val MAX_ASPECT_RATIO = 3.0
-        const val SOLIDITY_THRESHOLD = 0.4
     }
 
     private var _binding: FragmentUploaderBinding? = null
@@ -74,11 +66,11 @@ class UploaderFragment : Fragment() {
                 val source = ImageDecoder.createSource(requireActivity().contentResolver, uri)
                 val bitmap = ImageDecoder.decodeBitmap(source)
 
-                val results = findAndRecognizeDigits(bitmap)
+                val digit = recognizeImage(bitmap)
 
                 withContext(Dispatchers.Main) {
-                    viewModel.setBitmap(results.first)
-                    showResultSnackbar("Распознанные числа: ${results.second}")
+                    viewModel.setBitmap(bitmap)
+                    showResultSnackbar("Распознанная цифра: ${if (digit == -1) "не найдено" else digit}.")
                 }
             }
         }
@@ -92,11 +84,11 @@ class UploaderFragment : Fragment() {
                 val source = ImageDecoder.createSource(imageFile)
                 val bitmap = ImageDecoder.decodeBitmap(source)
 
-                val results = findAndRecognizeDigits(bitmap)
+                val digit = recognizeImage(bitmap)
 
                 withContext(Dispatchers.Main) {
-                    viewModel.setBitmap(results.first)
-                    showResultSnackbar("Распознанные числа: ${results.second}")
+                    viewModel.setBitmap(bitmap)
+                    showResultSnackbar("Распознанная цифра: ${if (digit == -1) "не найдено" else digit}.")
                 }
             }
         }
@@ -119,85 +111,6 @@ class UploaderFragment : Fragment() {
         val declaredLength = fileDescriptor.declaredLength
 
         return Interpreter(fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength))
-    }
-
-    private fun findContours(source: Mat): MutableList<MatOfPoint> {
-        val newSize = Size(source.width() * SCALE, source.height() * SCALE)
-        Imgproc.resize(source, source, newSize)
-
-        val gray = Mat()
-        Imgproc.cvtColor(source, gray, Imgproc.COLOR_RGBA2GRAY)
-
-        val blurred = Mat()
-        Imgproc.GaussianBlur(gray, blurred, Size(5.0, 5.0), 0.0)
-
-        val edges = Mat()
-        Imgproc.Canny(blurred, edges, 100.0, 200.0)
-
-        val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(3.0, 3.0))
-        Imgproc.morphologyEx(edges, edges, Imgproc.MORPH_CLOSE, kernel)
-
-        val contours: MutableList<MatOfPoint> = ArrayList()
-        val hierarchy = Mat()
-        Imgproc.findContours(
-            edges,
-            contours,
-            hierarchy,
-            Imgproc.RETR_EXTERNAL,
-            Imgproc.CHAIN_APPROX_SIMPLE
-        )
-
-        return contours
-    }
-
-    private fun transformRectToSquare(source: Mat, rect: Rect): Rect {
-        val maxSide = kotlin.math.max(rect.width, rect.height)
-        val dx = maxSide - rect.width
-        val dy = maxSide - rect.height
-        val newX = kotlin.math.max(0, rect.x - dx / 2)
-        val newY = kotlin.math.max(0, rect.y - dy / 2)
-        val newWidth = if (newX + maxSide > source.width()) source.width() - newX else maxSide
-        val newHeight = if (newY + maxSide > source.height()) source.height() - newY else maxSide
-
-        return Rect(newX, newY, newWidth, newHeight)
-    }
-
-    private suspend fun findAndRecognizeDigits(bitmap: Bitmap): Pair<Bitmap, List<Int>> {
-        return withContext(Dispatchers.Default) {
-            val convertedBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
-            val source = Mat()
-            Utils.bitmapToMat(convertedBitmap, source)
-
-            val recognizedDigits = ArrayList<Int>()
-            val contours = findContours(source)
-            for (contour in contours) {
-                val rect = Imgproc.boundingRect(contour)
-                if (rect.width < 6 || rect.height < 6) continue
-
-                val aspectRatio = rect.width.toDouble() / rect.height.toDouble()
-                if (aspectRatio !in MIN_ASPECT_RATIO..MAX_ASPECT_RATIO) continue
-
-                val area = Imgproc.contourArea(contour)
-                val boundingRectArea = rect.width * rect.height
-                val solidity = area / boundingRectArea
-                if (solidity < SOLIDITY_THRESHOLD) continue
-
-                val newRect = transformRectToSquare(source, rect)
-                val digitMat = Mat(source, newRect)
-                val digitBitmap = Bitmap.createBitmap(digitMat.cols(), digitMat.rows(), Bitmap.Config.ARGB_8888)
-                Utils.matToBitmap(digitMat, digitBitmap)
-
-                val recognizedDigit = recognizeImage(digitBitmap)
-                recognizedDigits.add(recognizedDigit)
-
-                Imgproc.rectangle(source, newRect.tl(), newRect.br(), Scalar(255.0, 0.0, 0.0), 2)
-            }
-
-            val resultBitmap = Bitmap.createBitmap(source.cols(), source.rows(), Bitmap.Config.ARGB_8888)
-            Utils.matToBitmap(source, resultBitmap)
-
-            Pair(resultBitmap, recognizedDigits)
-        }
     }
 
     private fun recognizeImage(bitmap: Bitmap): Int {
