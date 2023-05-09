@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">Address Analyzer</string>
+    <string name="action_settings">Settings</string>
+    <!-- Strings used for fragments for navigation -->
+    <string name="uploader_fragment_label">Uploader</string>
+    <string name="camera_fragment_label">Camera</string>
+    <string name="choose_photo">Choose a photo</string>
+    <string name="camera_dialog_title">Camera Permission Required</string>
+    <string name="camera_dialog_description">Camera permission is required to take photos. Please, go to the settings and allow the permission.</string>
+    <string name="camera_dialog_positive">Go to Settings</string>
+    <string name="camera_dialog_negative">Cancel</string>
+    <string name="take_photo">Take a photo</string>
+    <string name="button_ok">OK</string>
+</resources>
